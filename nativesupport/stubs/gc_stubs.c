@@ -1,0 +1,3 @@
+void GC_init() {
+    
+}
