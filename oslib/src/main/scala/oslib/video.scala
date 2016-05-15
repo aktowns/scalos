@@ -8,11 +8,11 @@ import scalanative.native._
 
 object Video {
   def colour(fg: Short, bg: Short): CShort =
-    (fg | (bg << 4)).toShort.asInstanceOf[CShort]
+    (fg | (bg << 4)).toShort
   
   def vga_entry(chr: CChar, col: CShort): CShort = {
-    var c = chr.toShort.asInstanceOf[CShort]
-    (c | (col << 8)).toShort.asInstanceOf[CShort]
+    var c = chr.toShort
+    (c | (col << 8)).toShort
   }
 
   def puts(str: CString): Unit = {
