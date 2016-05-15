@@ -34,6 +34,8 @@ object OSBuildPlugin extends AutoPlugin {
 
     val nativeQemu = settingKey[File]("Location of the qemu executable.")
 
+    val nativeStrip = settingKey[File]("Location of the strip executable.")
+
     val nativeEmitDependencyGraphPath = 
       settingKey[Option[File]]("If non-empty, emit linker graph to the given file path.")
   }

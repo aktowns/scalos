@@ -13,7 +13,7 @@ align 4
 section .bootstrap_stack
 align 4
 stack_bottom:
-	times 16384 db 0
+	times 32384 db 0
 stack_top:
 
 section .text

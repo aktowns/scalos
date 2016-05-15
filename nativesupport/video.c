@@ -1,3 +1,3 @@
 #include "stdtypes.h"
 
-uint16_t* video_memory = (uint16_t*) 0xB8000;
+uint16_t* videoMemory = (uint16_t*) 0xB8000;

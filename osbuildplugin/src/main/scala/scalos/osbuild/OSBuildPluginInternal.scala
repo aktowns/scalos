@@ -115,6 +115,13 @@ object OSBuildPluginInternal {
     iso
   }
   
+  private def stripExecutable(strip: File, kernel: File, target: File, log: Logger): Unit = {
+    log.info(s"Stripping $kernel")
+    
+    val stripCmd = abs(strip) +: Seq("--strip-all", abs(kernel))
+    Process(stripCmd, target) ! log  
+  }
+  
   private def launchQemu(qemu: File,
                          cdrom: File, 
                          target: File, 
@@ -156,6 +163,8 @@ object OSBuildPluginInternal {
     nativeGrubConfig := None,
 
     nativeQemu := file(Process(Seq("which", "qemu-system-i386")).lines_!.head),
+    
+    nativeStrip := file(Process(Seq("which", "strip")).lines_!.head),
 
     run := {
       val log         = streams.value.log
@@ -178,6 +187,7 @@ object OSBuildPluginInternal {
       val grubRescue  = nativeGrubMkRescue.value
       val grubConfig  = nativeGrubConfig.value
       val qemu        = nativeQemu.value
+      val strip       = nativeStrip.value
       val verbose     = nativeVerbose.value
       val dotpath     = nativeEmitDependencyGraphPath.value
       val opts        = new NativeOpts(classpath, abs(appll), dotpath.map(abs), entry, verbose)
@@ -191,6 +201,7 @@ object OSBuildPluginInternal {
       val asmObjs = compileAsm(nasm, nasmOpts, target, asmsources, log)
       
       val exc = linkObjects(linker, linkerOpts, target, irObjs ++ cObjs ++ asmObjs, executable, log)
+      stripExecutable(strip, executable, target, log)
       grubConfig match {
         case Some(cfg) => 
           val iso = createISO(grubRescue, exc, cfg, moduleName.value, target, log)
