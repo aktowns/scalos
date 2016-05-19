@@ -3,13 +3,13 @@ package oslib
 import scalanative.native._
 
 @extern object nativeVideo {
-  var videoMemory: Ptr[CShort] = extern
+  var video_memory: Ptr[CShort] = extern
 }
 
 object Video { 
   final val VGA_WIDTH = 80
   final val VGA_HEIGHT = 25
-   
+  
   var row: Int = 0
   var column: Int = 0
   var colour: CShort = Colour.vgaColour(Colour.Red.value, Colour.White.value)
@@ -28,7 +28,7 @@ object Video {
   
   @inline final def putEntryAt(c: CChar, col: CShort, x: CInt, y: CInt): Unit = {
     val index = (y * VGA_WIDTH) + x
-    nativeVideo.videoMemory(index) = vgaEntry(c, colour)
+    nativeVideo.video_memory(index) = vgaEntry(c, colour)
   } 
   
   @inline final def putc(c: CChar): Unit = {
@@ -44,7 +44,7 @@ object Video {
   }
 
   @inline final def puts(str: CString): Unit = {
-    val len = StringUtils.length(str)
+    val len = StringUtils.strlen(str)
     var i = 0
     while (i < len) {
       putc(str(i))

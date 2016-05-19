@@ -27,10 +27,11 @@ object OSBuildPluginInternal {
 
       val output = target / source.getName.replaceAll("\\.c$", ".o")
       val compile = abs(clang) +: (clangOpts ++ Seq("-c", "-o", abs(output), abs(source)))
-      
-      // log.info(s"Commandline: $compile")  
-      
-      Process(compile, target) ! log
+       
+      if ((Process(compile, target) ! log) != 0) {
+        throw new IllegalStateException(s"failed to compile $sources")
+      }
+
       output
     }
   }
@@ -46,9 +47,9 @@ object OSBuildPluginInternal {
       val output = target / source.getName.replaceAll("\\.asm$", ".o")
       val compile = abs(nasm) +: (nasmOpts ++ Seq("-o", abs(output), abs(source)))
       
-      // log.info(s"Commandline: $compile")  
-      
-      Process(compile, target) ! log
+      if ((Process(compile, target) ! log) != 0) {
+        throw new IllegalStateException(s"Failed to compile $sources")
+      }
       output
     }
   }
@@ -65,9 +66,9 @@ object OSBuildPluginInternal {
       val output = target / source.getName.replaceAll("\\.ll$", ".o")
       val compile = abs(clang) +: (clangOpts ++ Seq("-c", "-o", abs(output), abs(source)))
       
-      // log.info(s"Commandline: $compile")  
-      
-      Process(compile, target) ! log
+      if ((Process(compile, target) ! log) != 0) {
+        throw new IllegalStateException(s"Failed to compile $sources") 
+      }
       output
     }
   }
@@ -80,10 +81,10 @@ object OSBuildPluginInternal {
                           log: Logger): File = {
     log.info(s"Linking $objects using $linker $linkerOpts to $output")
     val link = abs(linker) +: (linkerOpts ++ Seq("-o", abs(output)) ++ cpToStrings(objects))
-    
-    // log.info(s"Commandline: $link")  
 
-    Process(link, target) ! log
+    if ((Process(link, target) ! log) != 0) {
+      throw new IllegalStateException(s"Failed to link: $objects")
+    }
     
     output
   }
@@ -105,12 +106,15 @@ object OSBuildPluginInternal {
     IO.createDirectory(grubdir)
     
     IO.copyFile(config, grubdir / "grub.cfg")
-    IO.copyFile(kernel, bootdir / "kernel")
+    IO.copyFile(kernel, bootdir / "kernel.bin")
     
-    val iso = file(target / name + ".iso")
+    // val iso = file(target / name + ".iso")
+    val iso = file(name + ".iso") 
     val rescue = abs(mkRescue) +: Seq("-o", abs(iso), abs(isodir))
     
-    Process(rescue, target) ! log
+    if ((Process(rescue, target) ! log) != 0) {
+      throw new IllegalStateException("failed to create iso")
+    }
 
     iso
   }
@@ -131,6 +135,33 @@ object OSBuildPluginInternal {
     Process(emu, target) ! log    
   }
   
+  private def launchBochs(terminal: File, 
+                          bochs: File,
+                          bochsConfig: Option[File], 
+                          bochsRc: Option[File],
+                          target: File, 
+                          log: Logger): Unit = {
+    
+    val cfg = bochsConfig.map((x) => Seq("-qf", abs(x))).getOrElse(Seq())
+    val rc = bochsRc.map((x) => Seq("-rc", abs(x))).getOrElse(Seq())
+    
+    val bochsCmd = abs(bochs) +: (cfg ++ rc)
+    
+    val emu = Seq(abs(terminal), "-e", bochsCmd.mkString(" "))
+    log.info(s"Command line: $emu")
+    Process(emu, target) ! log    
+  }
+
+  private def findClangObject(clang: File,
+                              clangOpts: Seq[String],
+                              obj: String): File = {
+    val cmd = abs(clang) +: (clangOpts :+ s"-print-file-name=$obj")
+    val out = Process(cmd)
+    
+    file(out.lines_!.head)
+  }
+                    
+
   lazy val projectSettings = Seq(
     addCompilerPlugin("org.scala-native" %% "nscplugin" % "0.1-SNAPSHOT"),
 
@@ -164,7 +195,29 @@ object OSBuildPluginInternal {
 
     nativeQemu := file(Process(Seq("which", "qemu-system-i386")).lines_!.head),
     
+    nativeBochs := file(Process(Seq("which", "bochs")).lines_!.head),
+    
+    nativeBochsConfig := None,
+
+    nativeBochsRcFile := None,
+    
+    nativeUseQemu := false,
+    
+    nativeUseBochs := false,
+    
+    nativeTerminal := file(Process(Seq("which", "gnome-terminal")).lines_!.head),
+    
+    nativeTerminalOptions := Seq("-e"),
+    
     nativeStrip := file(Process(Seq("which", "strip")).lines_!.head),
+
+    nativeCrtiSource := None,
+
+    nativeCrtnSource := None, 
+
+    nativeCrtBeginObject := findClangObject(nativeClang.value, Seq("--target=i686-linux-elf"), "crtbegin.o"),
+
+    nativeCrtEndObject := findClangObject(nativeClang.value, Seq("--target=i686-linux-elf"), "crtend.o"),
 
     run := {
       val log         = streams.value.log
@@ -189,25 +242,53 @@ object OSBuildPluginInternal {
       val qemu        = nativeQemu.value
       val strip       = nativeStrip.value
       val verbose     = nativeVerbose.value
+      val bochs       = nativeBochs.value    
+      val bochsConfig = nativeBochsConfig.value
+      val bochsRcFile = nativeBochsRcFile.value
+      val useQemu     = nativeUseQemu.value
+      val useBochs    = nativeUseBochs.value
+      val terminal    = nativeTerminal.value
       val dotpath     = nativeEmitDependencyGraphPath.value
+      val maybeCrti   = nativeCrtiSource.value
+      val maybeCrtn   = nativeCrtnSource.value 
+      val crtBegin    = nativeCrtBeginObject.value
+      val crtEnd      = nativeCrtEndObject.value
       val opts        = new NativeOpts(classpath, abs(appll), dotpath.map(abs), entry, verbose)
       
       log.info(s"Creating directory $target")
       IO.createDirectory(target)
       
       compileNir(opts, log)
-      val irObjs = compileLl(clang, clangOpts ++ clangIrOpts, target, Seq(file(abs(appll))), log)
+      val irObjs = compileLl(clang, clangOpts ++ clangIrOpts, target, Seq(appll), log)
+      
       val cObjs = compileC(clang, clangOpts ++ clangCOpts, target, csources, log)
       val asmObjs = compileAsm(nasm, nasmOpts, target, asmsources, log)
+
+      val preObj = maybeCrti
+                    .map((crti) => compileAsm(nasm, nasmOpts, target, Seq(crti), log))
+                    .map((crtiObj) => crtiObj :+ crtBegin).getOrElse(Seq())
+      val postObj = maybeCrtn
+                    .map((crtn) => compileAsm(nasm, nasmOpts, target, Seq(crtn), log))
+                    .map((crtnObj) => crtEnd +: crtnObj).getOrElse(Seq())
+
+      val objects = preObj ++ (irObjs ++ cObjs ++ asmObjs) ++ postObj
+
+      val exc = linkObjects(linker, linkerOpts, target, objects, executable, log)
       
-      val exc = linkObjects(linker, linkerOpts, target, irObjs ++ cObjs ++ asmObjs, executable, log)
-      stripExecutable(strip, executable, target, log)
+      IO.copyFile(exc, file("kernel.bin"))
+      // stripExecutable(strip, executable, target, log)
       grubConfig match {
         case Some(cfg) => 
           val iso = createISO(grubRescue, exc, cfg, moduleName.value, target, log)
-          launchQemu(qemu, iso, target, log)
+          if (useQemu) {
+            launchQemu(qemu, iso, target, log)
+          } else if (useBochs) { 
+            launchBochs(terminal, bochs, bochsConfig, bochsRcFile, target, log)
+          }
         case None => log.warn("No grub config supplied, not building iso")
       }
+      
+      IO.delete(target)
     }
   )
 }

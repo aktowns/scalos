@@ -33,8 +33,30 @@ object OSBuildPlugin extends AutoPlugin {
     val nativeGrubConfig = settingKey[Option[File]]("Build an ISO given a grub config")
 
     val nativeQemu = settingKey[File]("Location of the qemu executable.")
+    
+    val nativeBochs = settingKey[File]("Location of the bochs executable.")
+    
+    val nativeBochsConfig = settingKey[Option[File]]("Location of the bochs config file.")
+
+    val nativeBochsRcFile = settingKey[Option[File]]("Location of the bochs rc file.")
+    
+    val nativeUseQemu = settingKey[Boolean]("Should we launch qemu on the iso?")
+    
+    val nativeUseBochs = settingKey[Boolean]("Should we launch bochs on the iso?")
 
     val nativeStrip = settingKey[File]("Location of the strip executable.")
+    
+    val nativeTerminal = settingKey[File]("Location of a terminal executable.")
+    
+    val nativeTerminalOptions = settingKey[Seq[String]]("Terminal executable options")
+
+    val nativeCrtiSource = settingKey[Option[File]]("the global contructor source file")
+
+    val nativeCrtnSource = settingKey[Option[File]]("the global destructor source file") 
+
+    val nativeCrtBeginObject = settingKey[File]("the global constructor object provided by your compiler") 
+
+    val nativeCrtEndObject = settingKey[File]("the global destructor object provided by your compiler") 
 
     val nativeEmitDependencyGraphPath = 
       settingKey[Option[File]]("If non-empty, emit linker graph to the given file path.")
